@@ -61,18 +61,18 @@ const questions = [
   ...questions_3
 ];
 
-// inizializza contatori se non esistono
+// inizializzazione contatori per ogni domanda
 questions.forEach(q => {
-  if (q.seen === undefined) q.seen = 0;
-  if (q.wrong === undefined) q.wrong = 0;
+  if (q._seen === undefined) q._seen = 0;
+  if (q._wrong === undefined) q._wrong = 0;
 });
 
-let current;
+let current = null;
 let answered = false;
 let doneCount = 0;
 
-function shuffle(a) {
-  return a.sort(() => Math.random() - 0.5);
+function shuffle(arr) {
+  return arr.sort(() => Math.random() - 0.5);
 }
 
 function pickQuestion() {
@@ -88,42 +88,42 @@ function render() {
   document.getElementById("nextBtn").style.display = "none";
 
   current = questions[pickQuestion()];
-  current.seen++;
+  current._seen++;
 
   document.getElementById("question").innerText = current.q;
-
   document.getElementById("progress").innerText =
     `Domanda n° ${doneCount + 1} — Totali fatte: ${doneCount}`;
 
   document.getElementById("stats").innerText =
-    `Errori: ${current.wrong} / ${current.seen}`;
+    `Errori: ${current._wrong} / ${current._seen}`;
 
   const box = document.getElementById("answers");
   box.innerHTML = "";
 
-  shuffle([current.correct, ...current.wrong]).forEach(a => {
-    const b = document.createElement("button");
-    b.innerText = a;
-    b.onclick = () => check(a, b);
-    box.appendChild(b);
+  shuffle([current.correct, ...current.wrong]).forEach(ans => {
+    const btn = document.createElement("button");
+    btn.innerText = ans;
+    btn.onclick = () => checkAnswer(ans, btn);
+    box.appendChild(btn);
   });
 }
 
-function check(answer, btn) {
+function checkAnswer(answer, btn) {
   if (answered) return;
   answered = true;
   doneCount++;
 
-  document.querySelectorAll("button").forEach(b => b.disabled = true);
+  document.querySelectorAll("#answers button").forEach(b => b.disabled = true);
 
   if (answer === current.correct) {
     btn.classList.add("correct");
     current.weight = Math.max(1, current.weight - 1);
   } else {
     btn.classList.add("wrong");
-    current.wrong++;
+    current._wrong++;
     current.weight += 2;
-    document.querySelectorAll("button").forEach(b => {
+
+    document.querySelectorAll("#answers button").forEach(b => {
       if (b.innerText === current.correct) {
         b.classList.add("correct");
       }
@@ -131,13 +131,14 @@ function check(answer, btn) {
   }
 
   document.getElementById("stats").innerText =
-    `Errori: ${current.wrong} / ${current.seen}`;
+    `Errori: ${current._wrong} / ${current._seen}`;
 
   document.getElementById("nextBtn").style.display = "block";
 }
 
 document.getElementById("nextBtn").onclick = render;
 
+// prima domanda
 render();
 </script>
 </body>
