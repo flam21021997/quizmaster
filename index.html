@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz Master Pegaso</title>
+
+<style>
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f2f2f7;
+  padding: 20px;
+}
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 10px rgba(0,0,0,.1);
+}
+button {
+  width: 100%;
+  padding: 14px;
+  margin: 8px 0;
+  border-radius: 12px;
+  border: none;
+  background: #007aff;
+  color: white;
+  font-size: 16px;
+}
+button.correct { background:#34c759 }
+button.wrong { background:#ff3b30 }
+</style>
+</head>
+
+<body>
+<div class="card">
+  <h2 id="question"></h2>
+  <div id="answers"></div>
+  <small id="stats"></small>
+</div>
+
+<!-- DATABASE -->
+<script src="questions_1.js"></script>
+<script src="questions_2.js"></script>
+<script src="questions_3.js"></script>
+
+<script>
+const questions = [
+  ...questions_1,
+  ...questions_2,
+  ...questions_3
+];
+
+// progressi
+const saved = JSON.parse(localStorage.getItem("pegaso-progress"));
+if (saved) saved.forEach((s,i)=>questions[i] && (questions[i].weight=s.weight));
+
+function pickQuestion(){
+  const pool=[];
+  questions.forEach((q,i)=>{for(let j=0;j<q.weight;j++)pool.push(i)});
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+function shuffle(a){return a.sort(()=>Math.random()-0.5)}
+
+let current;
+
+function render(){
+  current=questions[pickQuestion()];
+  document.getElementById("question").innerText=current.q;
+  const box=document.getElementById("answers");
+  box.innerHTML="";
+  shuffle([current.correct,...current.wrong]).forEach(a=>{
+    const b=document.createElement("button");
+    b.innerText=a;
+    b.onclick=()=>check(a,b);
+    box.appendChild(b);
+  });
+  document.getElementById("stats").innerText=`Domande totali: ${questions.length}`;
+}
+
+function check(a,b){
+  document.querySelectorAll("button").forEach(x=>x.disabled=true);
+  if(a===current.correct){
+    b.classList.add("correct");
+    current.weight=Math.max(1,current.weight-1);
+  } else {
+    b.classList.add("wrong");
+    current.weight+=2;
+    document.querySelectorAll("button").forEach(x=>{
+      if(x.innerText===current.correct)x.classList.add("correct");
+    });
+  }
+  localStorage.setItem("pegaso-progress",
+    JSON.stringify(questions.map(q=>({weight:q.weight})))
+  );
+  setTimeout(render,1200);
+}
+
+render();
+</script>
+</body>
+</html>
