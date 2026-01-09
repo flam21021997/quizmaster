@@ -30,16 +30,27 @@ button.correct { background: #34c759; }
 button.wrong { background: #ff3b30; }
 button.secondary { background: #5856d6; }
 .hidden { display:none; }
-#top { font-size:14px; color:#555; margin-bottom:6px; }
+#top {
+  display:flex;
+  justify-content:space-between;
+  font-size:14px;
+  color:#555;
+  margin-bottom:6px;
+}
 </style>
 </head>
 
 <body>
 
 <div class="card">
-  <div id="top"></div>
+  <div id="top">
+    <div id="info"></div>
+    <div id="timer"></div>
+  </div>
+
   <h2 id="question"></h2>
   <div id="answers"></div>
+
   <button id="nextBtn" class="secondary hidden">Avanti</button>
   <button id="startExamBtn">🎯 Simulazione Test</button>
   <button id="exitExamBtn" class="secondary hidden">⬅️ Torna allo studio</button>
@@ -52,89 +63,77 @@ button.secondary { background: #5856d6; }
 <script>
 const QUESTIONS = [...questions_1, ...questions_2, ...questions_3];
 
-// inizializza metriche
+// metriche
 QUESTIONS.forEach(q=>{
   q._seen ??= 0;
   q._wrong ??= 0;
 });
 
-// =======================
-// SELEZIONE INTELLIGENTE STUDIO
-// =======================
-let cycleCount = 0;
-
-function pickStudyQuestion(){
-  // FASE 1: mai viste
-  const unseen = QUESTIONS.filter(q=>q._seen === 0);
-  if(unseen.length) return unseen[Math.floor(Math.random()*unseen.length)];
-
-  // FASE 1b: viste una volta
-  const once = QUESTIONS.filter(q=>q._seen === 1);
-  if(once.length) return once[Math.floor(Math.random()*once.length)];
-
-  // FASE 2: 3 difficili + 1 facile
-  cycleCount++;
-  const sorted = [...QUESTIONS].sort((a,b)=>{
-    const da = a._seen ? a._wrong/a._seen : 0;
-    const db = b._seen ? b._wrong/b._seen : 0;
-    return db-da;
-  });
-
-  if(cycleCount % 4 !== 0) {
-    return sorted[0]; // difficile
-  } else {
-    return sorted[Math.floor(sorted.length*0.7)]; // facile
-  }
-}
-
-// =======================
-// STATO
-// =======================
 let mode="study";
 let current=null;
 let answered=false;
 let done=0;
 
-// =======================
-// RENDER
-// =======================
+// ===== TIMER =====
+let timerId=null;
+let timeLeft=0;
+
+// ===== UTILS =====
+function shuffle(a){ return a.sort(()=>Math.random()-0.5); }
+
+// ===== LOGICA STUDIO (come prima) =====
+let cycle=0;
+function pickStudy(){
+  const unseen=QUESTIONS.filter(q=>q._seen===0);
+  if(unseen.length) return unseen[Math.floor(Math.random()*unseen.length)];
+
+  const once=QUESTIONS.filter(q=>q._seen===1);
+  if(once.length) return once[Math.floor(Math.random()*once.length)];
+
+  cycle++;
+  const sorted=[...QUESTIONS].sort((a,b)=>
+    (b._wrong/b._seen||0)-(a._wrong/a._seen||0)
+  );
+
+  return cycle%4!==0 ? sorted[0] : sorted[Math.floor(sorted.length*0.7)];
+}
+
+// ===== RENDER STUDIO =====
 function renderStudy(){
+  clearInterval(timerId);
   mode="study";
   answered=false;
-  document.getElementById("nextBtn").classList.add("hidden");
-  document.getElementById("exitExamBtn").classList.add("hidden");
+  document.getElementById("timer").innerText="";
   document.getElementById("startExamBtn").classList.remove("hidden");
+  document.getElementById("exitExamBtn").classList.add("hidden");
+  document.getElementById("nextBtn").classList.add("hidden");
 
-  current = pickStudyQuestion();
+  current=pickStudy();
   current._seen++;
 
-  document.getElementById("top").innerText =
-    `Studio — fatte: ${done} | Errori domanda: ${current._wrong}/${current._seen}`;
+  document.getElementById("info").innerText =
+    `Studio — fatte: ${done} | Errori: ${current._wrong}/${current._seen}`;
 
-  document.getElementById("question").innerText = current.q;
-  renderAnswers(current);
+  renderQuestion(current);
 }
 
-function renderAnswers(q){
+// ===== RENDER DOMANDA =====
+function renderQuestion(q){
+  document.getElementById("question").innerText=q.q;
   const box=document.getElementById("answers");
   box.innerHTML="";
-  [...q.wrong, q.correct].sort(()=>Math.random()-0.5)
-    .forEach(a=>{
-      const b=document.createElement("button");
-      b.innerText=a;
-      b.onclick=()=>answer(a,b);
-      box.appendChild(b);
-    });
+  shuffle([q.correct,...q.wrong]).forEach(a=>{
+    const b=document.createElement("button");
+    b.innerText=a;
+    b.onclick=()=>answer(a,b);
+    box.appendChild(b);
+  });
 }
 
-// =======================
-// RISPOSTA
-// =======================
+// ===== RISPOSTA =====
 function answer(ans,btn){
   if(answered) return;
   answered=true;
-  done++;
-
   document.querySelectorAll("#answers button").forEach(b=>b.disabled=true);
 
   if(ans===current.correct){
@@ -146,52 +145,81 @@ function answer(ans,btn){
       .forEach(b=>{ if(b.innerText===current.correct) b.classList.add("correct");});
   }
 
-  document.getElementById("nextBtn").classList.remove("hidden");
+  if(mode==="study"){
+    done++;
+    document.getElementById("nextBtn").classList.remove("hidden");
+  } else {
+    setTimeout(nextExam,800);
+  }
 }
 
-// =======================
-// SIMULAZIONE TEST
-// =======================
-let exam=[], examIdx=0, examScore=0, wrongList=[];
+// ===== ESAME =====
+let exam=[], idx=0, score=0, wrongList=[];
 
 function startExam(){
   mode="exam";
-  exam=[...QUESTIONS].sort(()=>Math.random()-0.5).slice(0,30);
-  examIdx=0; examScore=0; wrongList=[];
+  exam=shuffle([...QUESTIONS]).slice(0,30);
+  idx=0; score=0; wrongList=[];
+  timeLeft=30*60;
+
   document.getElementById("startExamBtn").classList.add("hidden");
   document.getElementById("exitExamBtn").classList.remove("hidden");
+
+  startTimer();
   renderExam();
+}
+
+function startTimer(){
+  updateTimer();
+  timerId=setInterval(()=>{
+    timeLeft--;
+    updateTimer();
+    if(timeLeft<=0) finishExam();
+  },1000);
+}
+
+function updateTimer(){
+  const m=Math.floor(timeLeft/60);
+  const s=timeLeft%60;
+  document.getElementById("timer").innerText=`⏱️ ${m}:${s.toString().padStart(2,"0")}`;
 }
 
 function renderExam(){
   answered=false;
-  current=exam[examIdx];
-  document.getElementById("top").innerText =
-    `Simulazione — ${examIdx+1}/30`;
-  document.getElementById("question").innerText=current.q;
-  renderAnswers(current);
+  current=exam[idx];
+  document.getElementById("info").innerText=`Simulazione — ${idx+1}/30`;
+  renderQuestion(current);
+}
+
+function nextExam(){
+  idx++;
+  if(idx>=30) finishExam();
+  else renderExam();
 }
 
 function finishExam(){
-  let html=`<h3>Risultato: ${examScore}/30</h3><h4>Domande sbagliate:</h4>`;
+  clearInterval(timerId);
+  let html=`<h3>Risultato: ${score}/30</h3><h4>Domande sbagliate:</h4>`;
   wrongList.forEach(w=>{
     html+=`<p><b>${w.q}</b><br>✔️ ${w.correct}</p>`;
   });
   document.getElementById("question").innerHTML=html;
   document.getElementById("answers").innerHTML="";
+  document.getElementById("info").innerText="";
+  document.getElementById("timer").innerText="";
 }
 
-// override answer per esame
-const oldAnswer=answer;
+// override risposta esame
+const baseAnswer=answer;
 answer=function(ans,btn){
-  if(mode==="study") return oldAnswer(ans,btn);
-
+  if(mode==="study") return baseAnswer(ans,btn);
   if(answered) return;
   answered=true;
+
   document.querySelectorAll("#answers button").forEach(b=>b.disabled=true);
 
   if(ans===current.correct){
-    examScore++;
+    score++;
     btn.classList.add("correct");
   } else {
     btn.classList.add("wrong");
@@ -200,17 +228,15 @@ answer=function(ans,btn){
       .forEach(b=>{ if(b.innerText===current.correct) b.classList.add("correct");});
   }
 
-  setTimeout(()=>{
-    examIdx++;
-    examIdx>=30 ? finishExam() : renderExam();
-  },800);
+  setTimeout(nextExam,800);
 };
 
-// =======================
+// ===== BOTTONI =====
 document.getElementById("nextBtn").onclick=renderStudy;
 document.getElementById("startExamBtn").onclick=startExam;
 document.getElementById("exitExamBtn").onclick=renderStudy;
 
+// avvio
 renderStudy();
 </script>
 </body>
